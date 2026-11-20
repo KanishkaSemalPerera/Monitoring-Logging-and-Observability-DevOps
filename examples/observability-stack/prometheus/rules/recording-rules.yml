@@ -1,0 +1,19 @@
+# Recording rules pre-compute expensive queries and store the result as a new series.
+# Naming convention:  level:metric:operations
+groups:
+  - name: sample-app-recording
+    interval: 15s
+    rules:
+      - record: route:http_requests:rate5m
+        expr: sum by (route) (rate(http_requests_total[5m]))
+
+      - record: route:http_errors:ratio_rate5m
+        expr: |
+          sum by (route) (rate(http_requests_total{status=~"5.."}[5m]))
+          /
+          sum by (route) (rate(http_requests_total[5m]))
+
+      - record: route:http_request_duration_seconds:p95_5m
+        expr: |
+          histogram_quantile(0.95,
+            sum by (route, le) (rate(http_request_duration_seconds_bucket[5m])))

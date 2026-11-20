@@ -1,0 +1,52 @@
+groups:
+  - name: availability
+    rules:
+      - alert: TargetDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} target {{ $labels.instance }} is down"
+          description: "Prometheus could not scrape {{ $labels.instance }} for more than 1 minute."
+
+  - name: sample-app-red
+    rules:
+      # ERRORS: more than 5% of requests failing (the lab app fails ~10% of orders on purpose)
+      - alert: HighErrorRate
+        expr: route:http_errors:ratio_rate5m > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate on {{ $labels.route }}"
+          description: "{{ $value | humanizePercentage }} of requests on {{ $labels.route }} are failing."
+          runbook_url: "https://example.com/runbooks/high-error-rate"
+
+      # DURATION: p95 latency above 1s
+      - alert: HighLatencyP95
+        expr: route:http_request_duration_seconds:p95_5m > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 latency above 1s on {{ $labels.route }}"
+          description: "p95 is {{ $value | humanizeDuration }}."
+
+  - name: host-use
+    rules:
+      - alert: HostHighCpu
+        expr: 100 * (1 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))) > 85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU above 85% on {{ $labels.instance }}"
+
+      - alert: HostDiskWillFillIn24h
+        expr: predict_linear(node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"}[6h], 24 * 3600) < 0
+        for: 30m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk {{ $labels.mountpoint }} on {{ $labels.instance }} will fill within 24h"

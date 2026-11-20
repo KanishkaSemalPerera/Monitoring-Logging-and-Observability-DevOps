@@ -1,0 +1,40 @@
+# OpenTelemetry Collector: receivers -> processors -> exporters
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:            # protect the collector from OOM
+    check_interval: 1s
+    limit_mib: 256
+  batch:                     # send spans in batches (fewer network calls)
+    timeout: 5s
+  attributes/env:            # add an attribute to every span
+    actions:
+      - key: lab.owner
+        value: devops-intern
+        action: upsert
+
+exporters:
+  otlp/jaeger:               # Jaeger accepts OTLP natively
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+  debug:                     # prints a summary to the collector's own logs
+    verbosity: basic
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, attributes/env, batch]
+      exporters: [otlp/jaeger, debug]

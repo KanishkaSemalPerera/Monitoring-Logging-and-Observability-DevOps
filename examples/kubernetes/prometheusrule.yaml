@@ -1,0 +1,31 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: sample-app-alerts
+  namespace: shop
+  labels:
+    release: monitoring       # must match the Prometheus ruleSelector
+spec:
+  groups:
+    - name: sample-app
+      rules:
+        - alert: SampleAppHighErrorRate
+          expr: |
+            sum(rate(http_requests_total{service="sample-app",status=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total{service="sample-app"}[5m])) > 0.05
+          for: 5m
+          labels:
+            severity: warning
+            team: payments
+          annotations:
+            summary: "sample-app error rate above 5%"
+            runbook_url: "https://example.com/runbooks/sample-app-errors"
+
+        - alert: PodCrashLooping
+          expr: increase(kube_pod_container_status_restarts_total{namespace="shop"}[15m]) > 3
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Pod {{ $labels.pod }} is restarting repeatedly"

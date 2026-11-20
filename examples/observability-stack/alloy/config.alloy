@@ -1,0 +1,70 @@
+// Grafana Alloy: collect Docker container logs and ship them to Loki.
+// Pipeline:  discovery.docker -> loki.source.docker -> loki.process -> loki.write
+
+// 1. Find containers that have the label logging=alloy
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+
+  filter {
+    name   = "label"
+    values = ["logging=alloy"]
+  }
+}
+
+// 2. Turn Docker metadata into Loki stream labels
+discovery.relabel "containers" {
+  targets = []
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "service_name"
+  }
+}
+
+// 3. Read the container log streams
+loki.source.docker "containers" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.docker.containers.targets
+  relabel_rules = discovery.relabel.containers.rules
+  forward_to    = [loki.process.json_logs.receiver]
+}
+
+// 4. Parse the JSON log line and promote "level" to a label.
+//    Keep labels LOW cardinality: never make trace_id or user_id a label!
+loki.process "json_logs" {
+  stage.json {
+    expressions = {
+      level    = "level",
+      trace_id = "trace_id",
+    }
+  }
+
+  stage.labels {
+    values = {
+      level = "",
+    }
+  }
+
+  // trace_id becomes structured metadata: searchable, but not an index label
+  stage.structured_metadata {
+    values = {
+      trace_id = "",
+    }
+  }
+
+  forward_to = [loki.write.local.receiver]
+}
+
+// 5. Push to Loki
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

@@ -1,0 +1,33 @@
+# Requires the Prometheus Operator (installed by kube-prometheus-stack).
+# 1) A Service that exposes the app's metrics port
+apiVersion: v1
+kind: Service
+metadata:
+  name: sample-app
+  namespace: shop
+  labels:
+    app: sample-app
+spec:
+  selector:
+    app: sample-app
+  ports:
+    - name: http-metrics      # the ServiceMonitor refers to this NAME
+      port: 8000
+      targetPort: 8000
+---
+# 2) A ServiceMonitor tells Prometheus: "scrape every Service with label app=sample-app"
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: sample-app
+  namespace: shop
+  labels:
+    release: monitoring       # must match the Prometheus serviceMonitorSelector
+spec:
+  selector:
+    matchLabels:
+      app: sample-app
+  endpoints:
+    - port: http-metrics
+      path: /metrics
+      interval: 15s
